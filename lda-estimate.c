@@ -31,31 +31,25 @@ double doc_e_step(document* doc, double* gamma, double** phi,
     int n, k;
 
     // posterior inference
-
     likelihood = lda_inference(doc, model, gamma, phi);
 
     // update sufficient statistics
-
     double gamma_sum = 0;
-    for (k = 0; k < model->num_topics; k++)
-    {
+    for (k = 0; k < model->num_topics; k++) {
         gamma_sum += gamma[k];
         ss->alpha_suffstats += digamma(gamma[k]);
     }
     ss->alpha_suffstats -= model->num_topics * digamma(gamma_sum);
 
-    for (n = 0; n < doc->length; n++)
-    {
-        for (k = 0; k < model->num_topics; k++)
-        {
+    for (n = 0; n < doc->length; n++) {
+        for (k = 0; k < model->num_topics; k++) {
             ss->class_word[k][doc->words[n]] += doc->counts[n]*phi[n][k];
             ss->class_total[k] += doc->counts[n]*phi[n][k];
         }
     }
-
     ss->num_docs = ss->num_docs + 1;
 
-    return(likelihood);
+    return (likelihood);
 }
 
 
@@ -64,15 +58,11 @@ double doc_e_step(document* doc, double* gamma, double** phi,
  *
  */
 
-void write_word_assignment(FILE* f, document* doc, double** phi, lda_model* model)
-{
+void write_word_assignment(FILE* f, document* doc, double** phi, lda_model* model) {
     int n;
-
     fprintf(f, "%03d", doc->length);
-    for (n = 0; n < doc->length; n++)
-    {
-        fprintf(f, " %04d:%02d",
-                doc->words[n], argmax(phi[n], model->num_topics));
+    for (n = 0; n < doc->length; n++) {
+        fprintf(f, " %04d:%02d", doc->words[n], argmax(phi[n], model->num_topics));
     }
     fprintf(f, "\n");
     fflush(f);
@@ -84,20 +74,17 @@ void write_word_assignment(FILE* f, document* doc, double** phi, lda_model* mode
  *
  */
 
-void save_gamma(char* filename, double** gamma, int num_docs, int num_topics)
-{
+void save_gamma(char* filename, double** gamma, int num_docs, int num_topics) {
     FILE* fileptr;
     int d, k;
     fileptr = fopen(filename, "w");
 
-    for (d = 0; d < num_docs; d++)
-    {
-	fprintf(fileptr, "%5.10f", gamma[d][0]);
-	for (k = 1; k < num_topics; k++)
-	{
-	    fprintf(fileptr, " %5.10f", gamma[d][k]);
-	}
-	fprintf(fileptr, "\n");
+    for (d = 0; d < num_docs; d++) {
+    	fprintf(fileptr, "%5.10f", gamma[d][0]);
+    	for (k = 1; k < num_topics; k++) {
+    	    fprintf(fileptr, " %5.10f", gamma[d][k]);
+    	}
+    	fprintf(fileptr, "\n");
     }
     fclose(fileptr);
 }
@@ -108,8 +95,7 @@ void save_gamma(char* filename, double** gamma, int num_docs, int num_topics)
  *
  */
 
-void run_em(char* start, char* directory, corpus* corpus)
-{
+void run_em(char* start, char* directory, corpus* corpus) {
 
     int d, n;
     lda_model *model = NULL;
@@ -131,32 +117,25 @@ void run_em(char* start, char* directory, corpus* corpus)
     char filename[100];
 
     lda_suffstats* ss = NULL;
-    if (strcmp(start, "seeded")==0)
-    {
+    if (strcmp(start, "seeded")==0) {
         model = new_lda_model(corpus->num_terms, NTOPICS);
         ss = new_lda_suffstats(model);
         corpus_initialize_ss(ss, model, corpus);
         lda_mle(model, ss, 0);
         model->alpha = INITIAL_ALPHA;
-    }
-    else if (strcmp(start, "random")==0)
-    {
+    } else if (strcmp(start, "random")==0) {
         model = new_lda_model(corpus->num_terms, NTOPICS);
         ss = new_lda_suffstats(model);
         random_initialize_ss(ss, model);
         lda_mle(model, ss, 0);
         model->alpha = INITIAL_ALPHA;
-    }
-    else if (strncmp(start, "manual=",7)==0)
-    {
+    } else if (strncmp(start, "manual=",7)==0) {
         model = new_lda_model(corpus->num_terms, NTOPICS);
         ss = new_lda_suffstats(model);
         manual_initialize_ss(start + 7, ss, model, corpus);
         lda_mle(model, ss, 0);
         model->alpha = INITIAL_ALPHA;
-    }
-    else
-    {
+    } else {
         model = load_lda_model(start);
         ss = new_lda_suffstats(model);
     }
@@ -178,23 +157,15 @@ void run_em(char* start, char* directory, corpus* corpus)
         zero_initialize_ss(ss, model);
 
         // e-step
-
-        for (d = 0; d < corpus->num_docs; d++)
-        {
+        for (d = 0; d < corpus->num_docs; d++) {
             if ((d % 1000) == 0) printf("document %d\n",d);
-            likelihood += doc_e_step(&(corpus->docs[d]),
-                                     var_gamma[d],
-                                     phi,
-                                     model,
-                                     ss);
+            likelihood += doc_e_step(&(corpus->docs[d]), var_gamma[d], phi, model, ss);
         }
 
         // m-step
-
         lda_mle(model, ss, ESTIMATE_ALPHA);
 
         // check for convergence
-
         converged = (likelihood_old - likelihood) / (likelihood_old);
         if (converged < 0) VAR_MAX_ITER = VAR_MAX_ITER * 2;
         likelihood_old = likelihood;
@@ -203,8 +174,7 @@ void run_em(char* start, char* directory, corpus* corpus)
 
         fprintf(likelihood_file, "%10.10f\t%5.5e\n", likelihood, converged);
         fflush(likelihood_file);
-        if ((i % LAG) == 0)
-        {
+        if ((i % LAG) == 0) {
             sprintf(filename,"%s/%03d",directory, i);
             save_lda_model(model, filename);
             sprintf(filename,"%s/%03d.gamma",directory, i);
@@ -223,8 +193,7 @@ void run_em(char* start, char* directory, corpus* corpus)
 
     sprintf(filename, "%s/word-assignments.dat", directory);
     FILE* w_asgn_file = fopen(filename, "w");
-    for (d = 0; d < corpus->num_docs; d++)
-    {
+    for (d = 0; d < corpus->num_docs; d++) {
         if ((d % 100) == 0) printf("final e step document %d\n",d);
         likelihood += lda_inference(&(corpus->docs[d]), model, var_gamma[d], phi);
         write_word_assignment(w_asgn_file, &(corpus->docs[d]), phi, model);
@@ -239,8 +208,7 @@ void run_em(char* start, char* directory, corpus* corpus)
  *
  */
 
-void read_settings(char* filename)
-{
+void read_settings(char* filename) {
     FILE* fileptr;
     char alpha_action[100];
     fileptr = fopen(filename, "r");
@@ -249,13 +217,10 @@ void read_settings(char* filename)
     fscanf(fileptr, "em max iter %d\n", &EM_MAX_ITER);
     fscanf(fileptr, "em convergence %f\n", &EM_CONVERGED);
     fscanf(fileptr, "alpha %s", alpha_action);
-    if (strcmp(alpha_action, "fixed")==0)
-    {
-	ESTIMATE_ALPHA = 0;
-    }
-    else
-    {
-	ESTIMATE_ALPHA = 1;
+    if (strcmp(alpha_action, "fixed")==0) {
+	       ESTIMATE_ALPHA = 0;
+    } else {
+	       ESTIMATE_ALPHA = 1;
     }
     fclose(fileptr);
 }
@@ -266,8 +231,7 @@ void read_settings(char* filename)
  *
  */
 
-void infer(char* model_root, char* save, corpus* corpus)
-{
+void infer(char* model_root, char* save, corpus* corpus) {
     FILE* fileptr;
     char filename[100];
     int i, d, n;
@@ -277,21 +241,23 @@ void infer(char* model_root, char* save, corpus* corpus)
 
     model = load_lda_model(model_root);
     var_gamma = malloc(sizeof(double*)*(corpus->num_docs));
-    for (i = 0; i < corpus->num_docs; i++)
-	var_gamma[i] = malloc(sizeof(double)*model->num_topics);
+    for (i = 0; i < corpus->num_docs; i++) {
+        var_gamma[i] = malloc(sizeof(double)*model->num_topics);
+    }
+
     sprintf(filename, "%s-lda-lhood.dat", save);
     fileptr = fopen(filename, "w");
-    for (d = 0; d < corpus->num_docs; d++)
-    {
-	if (((d % 100) == 0) && (d>0)) printf("document %d\n",d);
-
-	doc = &(corpus->docs[d]);
-	phi = (double**) malloc(sizeof(double*) * doc->length);
-	for (n = 0; n < doc->length; n++)
-	    phi[n] = (double*) malloc(sizeof(double) * model->num_topics);
-	likelihood = lda_inference(doc, model, var_gamma[d], phi);
-
-	fprintf(fileptr, "%5.5f\n", likelihood);
+    for (d = 0; d < corpus->num_docs; d++) {
+    	if (((d % 100) == 0) && (d>0)) {
+            printf("document %d\n",d);
+        }
+    	doc = &(corpus->docs[d]);
+    	phi = (double**) malloc(sizeof(double*) * doc->length);
+    	for (n = 0; n < doc->length; n++) {
+            phi[n] = (double*) malloc(sizeof(double) * model->num_topics);
+        }
+    	likelihood = lda_inference(doc, model, var_gamma[d], phi);
+    	fprintf(fileptr, "%5.5f\n", likelihood);
     }
     fclose(fileptr);
     sprintf(filename, "%s-gamma.dat", save);
@@ -300,19 +266,11 @@ void infer(char* model_root, char* save, corpus* corpus)
 
 
 /*
- * update sufficient statistics
- *
- */
-
-
-
-/*
  * main
  *
  */
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
     // (est / inf) alpha k settings data (random / seed/ model) (directory / out)
 
     corpus* corpus;
@@ -322,10 +280,8 @@ int main(int argc, char* argv[])
     seedMT(t1);
     // seedMT(4357U);
 
-    if (argc > 1)
-    {
-        if (strcmp(argv[1], "est")==0)
-        {
+    if (argc > 1) {
+        if (strcmp(argv[1], "est")==0) {
             INITIAL_ALPHA = atof(argv[2]);
             NTOPICS = atoi(argv[3]);
             read_settings(argv[4]);
@@ -333,17 +289,15 @@ int main(int argc, char* argv[])
             make_directory(argv[7]);
             run_em(argv[6], argv[7], corpus);
         }
-        if (strcmp(argv[1], "inf")==0)
-        {
+        if (strcmp(argv[1], "inf")==0) {
             read_settings(argv[2]);
             corpus = read_data(argv[4]);
             infer(argv[3], argv[5], corpus);
         }
     }
-    else
-    {
+    else {
         printf("usage : lda est [initial alpha] [k] [settings] [data] [random/seeded/manual=filename/*] [directory]\n");
         printf("        lda inf [settings] [model] [data] [name]\n");
     }
-    return(0);
+    return (0);
 }
