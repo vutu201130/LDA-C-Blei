@@ -19,14 +19,23 @@
 
 #include "lda-estimate.h"
 
+double lda_estep(corpus* corpus, double** var_gamma, double*** phi, lda_model* model, lda_suffstats* ss){
+    double likelihood = 0.0;
+    int d;
+    for (d = 0; d < corpus->num_docs; d++) {
+        if ((d % 1000) == 0) {
+            printf("document %d\n",d);
+        }
+        likelihood += doc_e_step(&(corpus->docs[d]), var_gamma[d], phi[d], model, ss);
+    }
+    return likelihood;
+}
 /*
  * perform inference on a document and update sufficient statistics
  *
  */
 
-double doc_e_step(document* doc, double* gamma, double** phi,
-                  lda_model* model, lda_suffstats* ss)
-{
+double doc_e_step(document* doc, double* gamma, double** phi, lda_model* model, lda_suffstats* ss) {
     double likelihood;
     int n, k;
 
@@ -99,21 +108,27 @@ void run_em(char* start, char* directory, corpus* corpus) {
 
     int d, n;
     lda_model *model = NULL;
-    double **var_gamma, **phi;
+    double **var_gamma, ***phi;
 
     // allocate variational parameters
 
     var_gamma = malloc(sizeof(double*)*(corpus->num_docs));
-    for (d = 0; d < corpus->num_docs; d++)
-	var_gamma[d] = malloc(sizeof(double) * NTOPICS);
+    for (d = 0; d < corpus->num_docs; d++) {
+        var_gamma[d] = malloc(sizeof(double) * NTOPICS);
+    }
 
     int max_length = max_corpus_length(corpus);
-    phi = malloc(sizeof(double*)*max_length);
-    for (n = 0; n < max_length; n++)
-	phi[n] = malloc(sizeof(double) * NTOPICS);
+
+    phi = malloc(sizeof(double*)*(corpus->num_docs));
+    for (d = 0; d < corpus->num_docs; d++) {
+        phi[d] = malloc(sizeof(double*)*max_length);
+        for (n = 0; n < max_length; n++) {
+            phi[d][n] = malloc(sizeof(double) * NTOPICS);
+        }
+    }
+
 
     // initialize model
-
     char filename[100];
 
     lda_suffstats* ss = NULL;
@@ -153,21 +168,20 @@ void run_em(char* start, char* directory, corpus* corpus) {
     while (((converged < 0) || (converged > EM_CONVERGED) || (i <= 2)) && (i <= EM_MAX_ITER))
     {
         i++; printf("**** em iteration %d ****\n", i);
-        likelihood = 0;
+
         zero_initialize_ss(ss, model);
 
         // e-step
-        for (d = 0; d < corpus->num_docs; d++) {
-            if ((d % 1000) == 0) printf("document %d\n",d);
-            likelihood += doc_e_step(&(corpus->docs[d]), var_gamma[d], phi, model, ss);
-        }
+        likelihood = lda_estep(corpus, var_gamma, phi, model, ss);
 
         // m-step
         lda_mle(model, ss, ESTIMATE_ALPHA);
 
         // check for convergence
         converged = (likelihood_old - likelihood) / (likelihood_old);
-        if (converged < 0) VAR_MAX_ITER = VAR_MAX_ITER * 2;
+        if (converged < 0) {
+            VAR_MAX_ITER = VAR_MAX_ITER * 2;
+        }
         likelihood_old = likelihood;
 
         // output model and likelihood

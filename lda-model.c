@@ -25,14 +25,13 @@
  */
 
 void lda_mle(lda_model* model, lda_suffstats* ss, int estimate_alpha) {
+    printf("M-step: updating beta. ss->num_docs = %d\n", ss->num_docs);
     int k; int w;
 
     for (k = 0; k < model->num_topics; k++) {
         for (w = 0; w < model->num_terms; w++) {
             if (ss->class_word[k][w] > 0) {
-                model->log_prob_w[k][w] =
-                    log(ss->class_word[k][w]) -
-                    log(ss->class_total[k]);
+                model->log_prob_w[k][w] = log(ss->class_word[k][w]) - log(ss->class_total[k]);
             } else {
                 model->log_prob_w[k][w] = -100;
             }
