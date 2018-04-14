@@ -7,6 +7,7 @@
 #include <float.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "lda.h"
 #include "lda-data.h"
@@ -28,7 +29,9 @@ double doc_e_step(document* doc,
                   double* gamma,
                   double** phi,
                   lda_model* model,
-                  lda_suffstats* ss);
+                  lda_suffstats* ss,
+                  pthread_mutex_t* lock
+              );
 
 void save_gamma(char* filename,
                 double** gamma,
@@ -46,5 +49,3 @@ void infer(char* model_root,
            corpus* corpus);
 
 #endif
-
-

@@ -16,32 +16,33 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
 // USA
-
+#include <pthread.h>
 #include "lda-estimate.h"
 
-double lda_estep(corpus* corpus, double** var_gamma, double*** phi, lda_model* model, lda_suffstats* ss){
-    double likelihood = 0.0;
-    int d;
-    for (d = 0; d < corpus->num_docs; d++) {
-        if ((d % 1000) == 0) {
-            printf("document %d\n",d);
-        }
-        likelihood += doc_e_step(&(corpus->docs[d]), var_gamma[d], phi[d], model, ss);
-    }
-    return likelihood;
-}
+typedef struct {
+    corpus* corpus;
+    double** var_gamma;
+    double*** phi;
+    lda_model* model;
+    lda_suffstats* ss;
+    int thread_idx;
+    double re_likelihood;
+    pthread_mutex_t* lock;
+} worker_param_t;
+
 /*
  * perform inference on a document and update sufficient statistics
  *
  */
 
-double doc_e_step(document* doc, double* gamma, double** phi, lda_model* model, lda_suffstats* ss) {
+double doc_e_step(document* doc, double* gamma, double** phi, lda_model* model, lda_suffstats* ss, pthread_mutex_t* lock) {
     double likelihood;
     int n, k;
 
     // posterior inference
     likelihood = lda_inference(doc, model, gamma, phi);
 
+    pthread_mutex_lock(lock);
     // update sufficient statistics
     double gamma_sum = 0;
     for (k = 0; k < model->num_topics; k++) {
@@ -58,7 +59,66 @@ double doc_e_step(document* doc, double* gamma, double** phi, lda_model* model, 
     }
     ss->num_docs = ss->num_docs + 1;
 
+    pthread_mutex_unlock(lock);
+
     return (likelihood);
+}
+
+
+void* worker(void* arg) {
+    worker_param_t* worker_param = (worker_param_t*) arg;
+    printf("worker %d\n", worker_param->thread_idx);
+
+    corpus* corpus = worker_param->corpus;
+    double** var_gamma = worker_param->var_gamma;
+    double*** phi = worker_param->phi;
+    lda_model* model = worker_param->model;
+    lda_suffstats* ss = worker_param->ss;
+    int thread_idx = worker_param->thread_idx;
+
+
+    int d;
+    double likelihood_sum;
+    for(d = 0; d < corpus->num_docs; d++){
+        if( d%4 == thread_idx){
+            likelihood_sum += doc_e_step(&(corpus->docs[d]), var_gamma[d], phi[d], model, ss, worker_param->lock);
+        }
+    }
+    worker_param->re_likelihood = likelihood_sum;
+
+    pthread_exit(NULL);
+}
+double lda_estep(corpus* corpus, double** var_gamma, double*** phi, lda_model* model, lda_suffstats* ss){
+    int N_THREAD = 4;
+    int d, i;
+    pthread_t threads[N_THREAD];
+    pthread_mutex_t lock;
+    if (pthread_mutex_init(&lock, NULL) != 0) {
+        printf("mutex init failed\n");
+        return 1;
+    }
+
+    worker_param_t worker_params[4] = {
+        {corpus, var_gamma, phi, model, ss, 0, 0.0, &lock},{corpus, var_gamma, phi, model, ss, 1, 0.0, &lock},
+        {corpus, var_gamma, phi, model, ss, 2, 0.0, &lock},{corpus, var_gamma, phi, model, ss, 3, 0.0, &lock},
+    };
+
+    for (i = 0; i < N_THREAD; ++i) {
+        pthread_create(&threads[i], NULL, worker, &worker_params[i]);
+    }
+
+    for (i = 0; i < N_THREAD; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    pthread_mutex_destroy(&lock);
+
+    double likelihood = 0.0;
+    for (i = 0; i < N_THREAD; ++i) {
+        likelihood += worker_params[i].re_likelihood;
+    }
+
+    return likelihood;
 }
 
 
@@ -209,8 +269,8 @@ void run_em(char* start, char* directory, corpus* corpus) {
     FILE* w_asgn_file = fopen(filename, "w");
     for (d = 0; d < corpus->num_docs; d++) {
         if ((d % 100) == 0) printf("final e step document %d\n",d);
-        likelihood += lda_inference(&(corpus->docs[d]), model, var_gamma[d], phi);
-        write_word_assignment(w_asgn_file, &(corpus->docs[d]), phi, model);
+        likelihood += lda_inference(&(corpus->docs[d]), model, var_gamma[d], phi[d]);
+        write_word_assignment(w_asgn_file, &(corpus->docs[d]), phi[d], model);
     }
     fclose(w_asgn_file);
     fclose(likelihood_file);
